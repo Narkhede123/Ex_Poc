@@ -6,6 +6,8 @@
 - spec cards: label, unit and number printed as separate boxes ("Muzzle velocity" / "m / sec" / "910" / "fps" /
   "2985") become one field ("Muzzle velocity: 910 m / sec; 2985 fps")
 - text-layer quality per page (garbage characters, word-like tokens), to send a page with a broken text layer to OCR
+- card titles: a stack of headings with nothing between them (".222 Remington" / "Bullet weight & type: 3.6 g / 55 gr
+  FMJ" / "Product no. 4315021") is one product's title, not three sections
 """
 
 from __future__ import annotations
@@ -208,4 +210,51 @@ def join_spec_cards(blocks: list[SemanticBlock]) -> list[SemanticBlock]:
         i = j
     for k, b in enumerate(out):
         b.order = k
+    return out
+
+
+# --- card titles ------------------------------------------------------------------------------------
+def merge_heading_stacks(blocks: list[SemanticBlock], sections: list) -> list[SemanticBlock]:
+    """A run of 2-4 headings on one page, same level, nothing between them, at least two carrying numbers and followed
+    by content, is one card title: the last heading (whose section holds the card's values) gets the whole title;
+    the earlier ones are dropped (their sections are left empty and disappear)."""
+    by_sec = {sec.section_id: sec for sec in sections}
+    out: list[SemanticBlock] = []
+    i, n = 0, len(blocks)
+
+    def heading(b: SemanticBlock) -> bool:
+        return b.type == BlockType.heading and b.scope == ScopeHint.main and 0 < len(b.text.strip()) <= 80
+
+    while i < n:
+        b = blocks[i]
+        j = i
+        while j < n and heading(blocks[j]) and blocks[j].page == b.page and blocks[j].level == b.level and j - i < 4:
+            j += 1
+        run = blocks[i:j]
+        follows = j < n and blocks[j].type != BlockType.heading
+        if len(run) >= 2 and follows and sum(1 for x in run if re.search(r"\d", x.text)) >= 2:
+            last = run[-1]
+            title = " · ".join(x.text.strip() for x in run)
+            old = last.text
+            last.text = title
+            last.attributes["card_title"] = ",".join(x.block_id for x in run[:-1])
+            sec = by_sec.get(last.section_id)
+            if sec is not None:
+                sec.heading = title
+                if sec.heading_path:
+                    sec.heading_path = [*sec.heading_path[:-1], title]
+            for x in blocks[j:]:
+                if x.section_id != last.section_id:
+                    break
+                if x.heading_path and x.heading_path[-1] == old:
+                    x.heading_path = [*x.heading_path[:-1], title]
+            if last.heading_path and last.heading_path[-1] == old:
+                last.heading_path = [*last.heading_path[:-1], title]
+            out.append(last)
+            i = j
+            continue
+        out.append(b)
+        i += 1
+    for k, x in enumerate(out):
+        x.order = k
     return out

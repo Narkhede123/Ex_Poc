@@ -22,5 +22,22 @@ def designation_tokens(text: str) -> set[str]:
 
 
 def clean_heading(text: str) -> str:
-    """A heading as a product name: without bullets, arrows or section numbers ("› M322" -> "M322")."""
-    return _LEAD.sub("", (text or "").strip()).strip(" :.-–—")
+    """A heading as a product name: without bullets, arrows or section numbers ("› M322" -> "M322"); a calibre keeps its
+    leading point (".222 Remington")."""
+    name = _LEAD.sub("", (text or "").strip()).strip(" :-–—").rstrip(".")
+    return name if re.match(r"^\.\d", name) else name.lstrip(".")
+
+
+def card_name(title: str) -> tuple[str, list[str]]:
+    """A card title merged from stacked headings (".222 Remington · Bullet weight & type: 3.6 g / 55 gr FMJ · Product no.
+    4315021") as a product name without its field labels, and the order codes it carries as aliases
+    (".222 Remington 3.6 g / 55 gr FMJ", ["4315021"])."""
+    parts, codes = [], []
+    for part in (p.strip() for p in title.split(" · ")):
+        m = LABEL_PREFIX.match(part)
+        if m:
+            codes += [c for c in re.findall(r"[A-Za-z0-9][A-Za-z0-9/-]{2,}", part[m.end():]) if re.search(r"\d", c)]
+            continue
+        label, sep, value = part.partition(":")
+        parts.append(value.strip() if sep and re.search(r"\d", value) and len(label) <= 40 else part)
+    return clean_heading(" ".join(x for x in parts if x)), codes

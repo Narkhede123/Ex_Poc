@@ -195,3 +195,32 @@ def test_document_kind_comes_from_the_page_map_and_the_scan_only_fills_gaps():
     assert document_kind("brochure", ["manual_language"])[0] == "product_sheet"  # a brochure that mentions maintenance
     assert document_kind("other", ["tender_language"])[0] == "tender"
     assert document_kind(None, [])[0] == "other"
+
+
+def test_a_stack_of_headings_is_one_card_title():
+    from defence_extractor.ingest.pdf_layout import merge_heading_stacks
+
+    b = _Builder("D")
+    for h in (".222 Remington", "Bullet weight & type: 3.6 g / 55 gr FMJ", "Product no. 4315021"):
+        b.heading(h, 2, 4, None)
+    b.block("Muzzle velocity: 910 m / sec", BlockType.key_value, 4, None)
+    b.heading("Overview", 2, 5, None)
+    b.heading("Features", 2, 5, None)  # plain titles without numbers stay apart
+    b.block("Rugged design", BlockType.paragraph, 5, None)
+    blocks = merge_heading_stacks(b.blocks, b.sections)
+    heads = [x.text for x in blocks if x.type == BlockType.heading]
+    assert heads == [".222 Remington · Bullet weight & type: 3.6 g / 55 gr FMJ · Product no. 4315021", "Overview", "Features"]
+    value = next(x for x in blocks if x.text.startswith("Muzzle"))
+    assert value.heading_path[-1].startswith(".222 Remington ·")
+    doc = b.build(fmt="pdf", url=None, path="/x.pdf", sha="0" * 64, title="t", warnings=[], parser="t")
+    sec = next(s for s in doc.sections if s.section_id == value.section_id)
+    assert sec.heading.startswith(".222 Remington ·") and [x.order for x in blocks] == list(range(len(blocks)))
+
+
+
+def test_a_card_title_names_the_product_without_labels_and_keeps_the_calibre_point():
+    from defence_extractor.agents.designations import card_name, clean_heading
+
+    assert card_name(".222 Remington · Bullet weight & type: 3.6 g / 55 gr FMJ · Product no. 4315021") == \
+        (".222 Remington 3.6 g / 55 gr FMJ", ["4315021"])
+    assert clean_heading(".222 Remington") == ".222 Remington" and clean_heading("› M322.") == "M322"

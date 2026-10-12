@@ -12,7 +12,7 @@ from ..contracts.page import PageMap, SectionAssessment, SectionRole
 from ..pipeline.render import build_chunks, est_tokens, header, outline, outline_sections, render_blocks
 from ..pipeline.state import DocState
 from .base import Runtime, ask, bisect_on_overflow, mention_scan, norm_name
-from .designations import LABEL_PREFIX, clean_heading, designation_tokens
+from .designations import LABEL_PREFIX, card_name, clean_heading, designation_tokens
 from .prompts import A2_TASK, A3_TASK, A4_TASK, A7_TASK
 from .schemas import A2Out, A3Out, A4Out, A7Out
 
@@ -274,7 +274,10 @@ def _designation_candidates(doc, merged: list[dict]) -> list[dict]:
     out: list[dict] = []
 
     def add(name: str, blocks: list[str], sibling: bool = False) -> None:
-        toks = designation_tokens(name)
+        codes: list[str] = []
+        if " · " in name:  # a card title from stacked headings: the name without labels, its order codes as aliases
+            name, codes = card_name(name)
+        toks = designation_tokens(name) | {c.upper() for c in codes}
         if (not toks and not sibling) or toks & known or norm_name(name) in known_names or len(name) > 90 \
                 or LABEL_PREFIX.match(name):
             return

@@ -18,7 +18,8 @@ import functools
 import threading
 from pathlib import Path
 
-from .pdf_layout import dehyphenate, join_spec_cards, mark_contents_and_leaders, text_quality, vocabulary
+from .pdf_layout import (dehyphenate, join_spec_cards, mark_contents_and_leaders, merge_heading_stacks, text_quality,
+                         vocabulary)
 from ..contracts.document import BlockType, ScopeHint, Section, SemanticBlock, SemanticDocument, SemanticTable, TableCell
 
 log = logging.getLogger(__name__)
@@ -356,6 +357,7 @@ class PdfAdapter:
         if title is None:
             title = next((blk.text for blk in b.blocks if blk.type == BlockType.heading), None)
         mark_contents_and_leaders(b.blocks)
+        b.blocks = merge_heading_stacks(b.blocks, b.sections)
         b.blocks = join_spec_cards(b.blocks)
         return b.build(fmt="pdf", url=url, path=str(path), sha=sha, title=title, warnings=warnings,
                        parser=f"{PARSER_VERSION}+docling")
@@ -399,6 +401,7 @@ class PdfAdapter:
         if not b.blocks:
             warnings.append("no text layer found (scanned PDF?) and OCR path unavailable")
         mark_contents_and_leaders(b.blocks)
+        b.blocks = merge_heading_stacks(b.blocks, b.sections)
         b.blocks = join_spec_cards(b.blocks)
         return b.build(fmt="pdf", url=url, path=str(path), sha=sha, title=None, warnings=warnings,
                        parser=f"{PARSER_VERSION}+pdfium")
