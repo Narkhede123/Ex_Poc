@@ -13,7 +13,8 @@ _NOT_MODEL = re.compile(r"(?i)^\d+(?:[.,]\d+)?(?:mm|cm|m|km|kg|g|t|in|ft|lb|lbs|
 # headings that label an identifier of the product above them ("UNS No. C74500", "Product no. 4315021", "Part number")
 LABEL_PREFIX = re.compile(r"(?i)^\s*(?:uns|product|part|item|order|catalog(?:ue)?|article|nsn|ref(?:erence)?|model|type|"
                           r"serial|drawing|spec(?:ification)?)\s*(?:no\.?|nr\.?|number|#|code)\b")
-_LEAD = re.compile(r"^[\s›»•·▪■◆►\-–—*]+|^\d+(?:\.\d+)*\s+(?=[A-Za-z])")
+# bullets and section numbers ("› M322", "6 Introduction"), but not a calibre or size ("6 mm BR Norma", "155 mm L/52")
+_LEAD = re.compile(r"^[\s›»•·▪■◆►\-–—*]+|^\d+(?:\.\d+)*\s+(?=[A-Za-z])(?!(?:mm|cm|m|in|gr|g|kg|ga|lb|cal)\b)")
 
 
 def designation_tokens(text: str) -> set[str]:

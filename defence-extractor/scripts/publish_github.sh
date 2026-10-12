@@ -33,4 +33,6 @@ git status --short | head -20
 echo "files staged: $(git diff --cached --name-only | wc -l)"
 git diff --cached --quiet && { echo "nothing to commit"; exit 0; }
 git commit -q -m "$MSG"
-git push -u "$PUSH_REMOTE" "$BRANCH"
+# with the GitHub CLI logged in, push with its token only (the macOS keychain helper can block on a dialog)
+if command -v gh >/dev/null 2>&1; then git -c credential.helper= -c credential.helper='!gh auth git-credential' push -u "$PUSH_REMOTE" "$BRANCH"
+else git push -u "$PUSH_REMOTE" "$BRANCH"; fi

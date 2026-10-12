@@ -224,3 +224,17 @@ def test_a_card_title_names_the_product_without_labels_and_keeps_the_calibre_poi
     assert card_name(".222 Remington · Bullet weight & type: 3.6 g / 55 gr FMJ · Product no. 4315021") == \
         (".222 Remington 3.6 g / 55 gr FMJ", ["4315021"])
     assert clean_heading(".222 Remington") == ".222 Remington" and clean_heading("› M322.") == "M322"
+
+
+
+def test_a_page_title_above_the_first_card_is_not_part_of_its_name():
+    from defence_extractor.agents.designations import clean_heading
+    from defence_extractor.ingest.pdf_layout import merge_heading_stacks
+
+    b = _Builder("D")
+    for h in ("LAPUA CENTERFIRE CARTRIDGES", ".222 Remington", "Bullet weight & type: 3.6 g / 55 gr FMJ", "Product no. 4315021"):
+        b.heading(h, 2, 4, None)
+    b.block("Muzzle velocity: 910 m / sec", BlockType.key_value, 4, None)
+    heads = [x.text for x in merge_heading_stacks(b.blocks, b.sections) if x.type == BlockType.heading]
+    assert heads[0] == "LAPUA CENTERFIRE CARTRIDGES" and heads[1].startswith(".222 Remington ·")
+    assert clean_heading("6 mm BR Norma") == "6 mm BR Norma" and clean_heading("6 Introduction") == "Introduction"

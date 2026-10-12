@@ -231,6 +231,10 @@ def merge_heading_stacks(blocks: list[SemanticBlock], sections: list) -> list[Se
         while j < n and heading(blocks[j]) and blocks[j].page == b.page and blocks[j].level == b.level and j - i < 4:
             j += 1
         run = blocks[i:j]
+        while len(run) > 2 and not re.search(r"\d", run[0].text):  # a page title above the first card stays apart
+            out.append(run[0])
+            i += 1
+            run = run[1:]
         follows = j < n and blocks[j].type != BlockType.heading
         if len(run) >= 2 and follows and sum(1 for x in run if re.search(r"\d", x.text)) >= 2:
             last = run[-1]
