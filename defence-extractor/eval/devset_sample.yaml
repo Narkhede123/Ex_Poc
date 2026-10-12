@@ -1,0 +1,9 @@
+# Small sample for checking new functionality quickly (4 documents, ~1 h on the farm):
+# sibling model names (two-model brochure), footnote markers (helicopter page), spec cards (Lapua page 4),
+# an image page read by OCR when no vision model is available (IWI page 24: provenance and review list).
+# Score: dx eval <run> --gold eval/gold_large,eval/gold_corpus,eval/gold --devset eval/devset_sample.yaml
+docs:
+  - {id: pdf_62fb98a79ebc86a0, why: "two products in one spec table (SHARKY 774 / 775)"}
+  - {id: E526, why: "helicopter page, values with footnote markers"}
+  - {id: pdf_d802f1477a652544, pages: "4", why: "Lapua spec cards"}
+  - {id: pdf_e9e47aa8ee65e39e, pages: "24", why: "IWI image-only product list (OCR route, review list)"}

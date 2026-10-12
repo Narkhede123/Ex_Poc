@@ -32,10 +32,10 @@ class Runtime:
 
 async def ask(rt: Runtime, *, agent: str, role: str, header: str, evidence: str, task: str, schema: type[T],
               doc_id: str, reasoning: str = "off", max_tokens: int | None = None,
-              images: list[str] | None = None) -> LLMResult[T]:
+              images: list[str] | None = None, non_empty: bool = False) -> LLMResult[T]:
     user = header.rstrip() + "\n\n" + (evidence.rstrip() + "\n\n" if evidence else "") + task.strip()
     return await rt.gw.call(agent=agent, role=role, system=SHARED_RULES, user=user, schema=schema, doc_id=doc_id,
-                            reasoning=reasoning, max_tokens=max_tokens, images=images)
+                            reasoning=reasoning, max_tokens=max_tokens, images=images, non_empty=non_empty)
 
 
 # ---------------------------------------------------------------------------------------------------

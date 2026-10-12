@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import time
 from pathlib import Path
 from typing import Awaitable, Callable
@@ -175,6 +176,8 @@ async def run_stage(rt, st: DocState, stage: str, runs_dir: Path) -> None:
         return
     before = rt.gw.by_doc.get(st.ref.doc_id, Usage()).model_copy()
     t0 = time.time()
+    if stage in (os.environ.get("DX_FAIL_STAGE") or "").split(","):  # robustness test: force this stage to fail
+        raise RuntimeError(f"forced failure of stage {stage} (DX_FAIL_STAGE)")
     await STAGE_FUNCS[stage](rt, st)
     after = rt.gw.by_doc.get(st.ref.doc_id, Usage())
     st.timings.append(StageTiming(stage=stage, seconds=round(time.time() - t0, 2), usage=_delta(before, after)))

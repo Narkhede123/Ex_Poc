@@ -52,6 +52,12 @@ class Settings(BaseSettings):
     context_window: int = 0
 
     main_model: str = "qwen/qwen3.8-27b"
+    # main-role calls that ask for reasoning (roles, attribution, references, the retry after an empty answer) go to
+    # this model when set; on an endpoint whose main model reasons until its token limit, a fast thinker keeps them short
+    reasoner_model: str = ""
+    # "off": every call goes out without thinking, whatever the agent asks for (endpoints whose models reason until their
+    # token limit when thinking is on); "" = as each agent asks
+    reasoning_limit: str = ""
     main_providers: list[str] = Field(default_factory=lambda: ["DeepInfra", "AkashML", "Parasail", "Chutes"])
     main_quantizations: list[str] = Field(default_factory=lambda: ["bf16", "fp8"])
     verifier_model: str = "openai/gpt-oss-120b"
@@ -123,6 +129,9 @@ class Settings(BaseSettings):
                 top_p=0.9,
                 max_tokens=12000,
             )
+        if role == "reasoner":  # main-role calls that ask for reasoning, when a separate reasoner model is set
+            return ModelRoute(model=self.reasoner_model or self.main_model, providers=self.main_providers, temperature=0.2,
+                              max_tokens=12000)
         if role == "verifier":
             return ModelRoute(
                 model=self.verifier_model, providers=self.verifier_providers, temperature=0.2, max_tokens=12000,

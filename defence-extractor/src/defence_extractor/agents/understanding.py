@@ -117,7 +117,7 @@ async def a3_entities(rt: Runtime, st: DocState) -> KnowledgeGraph:
                       doc_id=doc.doc_id, reasoning="off", max_tokens=6000)
         if not r.parsed.entities and sum(content_items.get(b, 0) for b in ids) >= 2:  # empty-output guard
             r = await ask(rt, agent="A3:retry_thinking", role="main", header=hdr, evidence=ev, task=A3_TASK,
-                          schema=A3Out, doc_id=doc.doc_id, reasoning="low", max_tokens=10000)
+                          schema=A3Out, doc_id=doc.doc_id, reasoning="low", max_tokens=10000, non_empty=True)
         return r
 
     groups = await asyncio.gather(*[bisect_on_overflow(run, ids) for ids in chunks_ids if ids], return_exceptions=True)

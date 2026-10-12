@@ -51,7 +51,7 @@ bash scripts/server_setup.sh            # uv, .venv (Python 3.12), CPU torch, do
 source .venv/bin/activate
 cp .env.example .env                     # then set LLM_BASE_URL, LLM_API_KEY and the model names
 python scripts/llm_probe.py              # checks the endpoint: chat, JSON schema, image input, thinking switch, throughput
-python -m pytest -q tests/unit           # 70 unit tests, no LLM calls
+python -m pytest -q tests/unit           # 73 unit tests, no LLM calls
 ```
 
 ### Run on your own chunk of documents
@@ -115,7 +115,8 @@ python scripts/devset_summary.py weak_<tag> guard_<tag>            # per documen
 
 `eval/devset_weak.yaml` holds the pages where accuracy was low, `eval/devset_guard.yaml` documents that already score
 well: a change ships when the guard set does not drop and the weak set rises. `*_full.yaml` are the longer nightly
-versions.
+versions; `eval/devset_sample.yaml` is a 4-document smoke test of new functionality (`dx run --devset
+eval/devset_sample.yaml --run-id <id>`).
 
 ### PDF challenge scan
 
@@ -143,6 +144,12 @@ The gateway speaks the OpenAI chat-completions API with strict JSON-schema outpu
   `A4_EVIDENCE_TOKENS`, `A4_BATCH`, `A6_BATCH`, `A7_BATCH_BLOCKS`, `AUDIT_MAX_ITEMS`, `VERIFY_BATCH_SIZE` (see `.env.example`).
 - `VISION_ENABLED=false` when no model of the endpoint accepts images: image pages are then read by OCR only and listed
   in the review list.
+- Thinking control: `REASONING_LIMIT=off` sends every call without thinking (for endpoints whose models reason until
+  their token limit once thinking is on; the retry after an empty answer then asks for a non-empty list instead).
+  `REASONER_MODEL` routes the main-role calls that ask for reasoning (roles, attribution, references, retries) to a
+  second model, e.g. a fast mixture-of-experts model next to a slower dense main model.
+- Robustness test: `DX_FAIL_STAGE=entities,roles dx run ...` forces those stages to fail; the document must still
+  finish (status `degraded`, `document.failed_stages`) on its fallbacks.
 - **OpenRouter** (`LLM_API_FLAVOR=openrouter`): provider pinning, cost accounting per call and document, budget guard on
   the key balance.
 

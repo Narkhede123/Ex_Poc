@@ -28,7 +28,7 @@ def test_streamed_completion_is_reassembled(tmp_path):
         assert body["stream"] is True and body["stream_options"] == {"include_usage": True}
         return httpx.Response(200, text=sse, headers={"content-type": "text/event-stream"})
 
-    gw = Gateway(Settings(llm_api_flavor="openai", llm_cache=False), tmp_path / "calls.jsonl")
+    gw = Gateway(Settings(_env_file=None, llm_api_flavor="openai", llm_cache=False), tmp_path / "calls.jsonl")
 
     async def go():
         gw._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
@@ -49,7 +49,8 @@ def _sse(text: str) -> str:
 
 
 def _gateway(tmp_path, handler, **kw):
-    s = Settings(llm_api_flavor="openai", llm_cache=False, verifier_model="big-72b", verifier_fallback_model="small-27b", **kw)
+    s = Settings(_env_file=None, llm_api_flavor="openai", llm_cache=False, verifier_model="big-72b",  # never the local .env
+                 verifier_fallback_model="small-27b", **kw)
     gw = Gateway(s, tmp_path / "calls.jsonl")
     gw._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     return gw
@@ -198,3 +199,48 @@ def test_a_call_that_reasons_asks_the_proxy_for_reasoning(tmp_path):
     assert "reasoning_effort" not in sent[0] and sent[0]["chat_template_kwargs"] == {"enable_thinking": False}
     assert sent[1]["reasoning_effort"] == "low" and sent[1]["chat_template_kwargs"] == {"enable_thinking": True}
 
+
+
+
+def test_calls_that_reason_go_to_the_reasoner_model_when_one_is_set(tmp_path):
+    models = []
+
+    def handler(request):
+        models.append(json.loads(request.content)["model"])
+        return httpx.Response(200, text=_sse('{"facts": ["ok"]}'), headers={"content-type": "text/event-stream"})
+
+    gw = _gateway(tmp_path, handler, main_model="qwen-main", reasoner_model="gemma-fast")
+
+    async def go():
+        try:
+            await gw.call(agent="A5B", role="main", system="s", user="u1", schema=Out, doc_id="D", reasoning="off")
+            await gw.call(agent="A4", role="main", system="s", user="u2", schema=Out, doc_id="D", reasoning="low")
+        finally:
+            await gw._client.aclose()
+
+    asyncio.run(go())
+    assert models == ["qwen-main", "gemma-fast"]
+
+
+
+def test_with_reasoning_off_nothing_thinks_and_a_retry_cannot_be_empty(tmp_path):
+    sent = []
+
+    def handler(request):
+        sent.append(json.loads(request.content))
+        return httpx.Response(200, text=_sse('{"facts": ["ok"]}'), headers={"content-type": "text/event-stream"})
+
+    gw = _gateway(tmp_path, handler, reasoning_limit="off", reasoner_model="gemma-fast")
+
+    async def go():
+        try:
+            await gw.call(agent="A3:retry_thinking", role="main", system="s", user="u", schema=Out, doc_id="D",
+                          reasoning="low", non_empty=True)
+        finally:
+            await gw._client.aclose()
+
+    asyncio.run(go())
+    body = sent[0]
+    assert body["chat_template_kwargs"] == {"enable_thinking": False} and "reasoning_effort" not in body
+    assert body["model"] != "gemma-fast"  # no reasoning, so no reasoner
+    assert body["response_format"]["json_schema"]["schema"]["properties"]["facts"]["minItems"] == 1

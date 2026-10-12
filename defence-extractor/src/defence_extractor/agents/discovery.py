@@ -374,7 +374,7 @@ async def a5b_open_discovery(rt: Runtime, st: DocState) -> list[CandidateFact]:
             c.tokens >= 250 and set(c.roles) & {"specifications", "product_overview", "features_capabilities", "variants"})
         if not res.parsed.facts and substantive:
             res = await ask(rt, agent="A5B:retry_thinking", role="main", header=hdr, evidence=ev, task=task,
-                            schema=FactsOut, doc_id=doc.doc_id, reasoning="low", max_tokens=16000)
+                            schema=FactsOut, doc_id=doc.doc_id, reasoning="low", max_tokens=16000, non_empty=True)
         out = []
         for f in res.parsed.facts:
             cf = to_candidate(st, f, "open_discovery", c.section_ids[0] if c.section_ids else None, "A5B", c.block_ids)

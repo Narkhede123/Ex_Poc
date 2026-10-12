@@ -60,6 +60,15 @@ MIN_ANSWER_TOKENS = 1200  # below this, a call cannot answer within the context 
 FORCED_THINKING_TOKENS = 1500  # ... plus the reasoning spent first by a call that thinks
 
 
+def _non_empty(sch: dict) -> dict:
+    """The answer's top-level lists must hold at least one item (llama.cpp grammars enforce minItems): a retry after an
+    empty answer, on content the inventory says is there, cannot collapse to an empty list again."""
+    for p in (sch.get("properties") or {}).values():
+        if p.get("type") == "array":
+            p["minItems"] = 1
+    return sch
+
+
 def prompt_tokens(text: str) -> int:
     """Prompt tokens, conservatively: Qwen-family tokenizers split numbers into single digits, so a spec table costs
     about one token per digit ("1,838,200" is 9 tokens, not 3); other text about PROMPT_CHARS_PER_TOKEN characters."""
@@ -101,7 +110,7 @@ class Gateway:
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         self.budget = budget
         self.cache = cache
-        self._sems = {r: asyncio.Semaphore(settings.llm_concurrency) for r in ("main", "verifier", "vision")}
+        self._sems = {r: asyncio.Semaphore(settings.llm_concurrency) for r in ("main", "reasoner", "verifier", "vision")}
         self._client: httpx.AsyncClient | None = None
         self.usage = Usage()
         self.by_doc: dict[str, Usage] = {}
@@ -144,10 +153,14 @@ class Gateway:
     # ------------------------------------------------------------------------------------------
     async def call(self, *, agent: str, role: str, system: str, user: str, schema: type[T], doc_id: str = "",
                    reasoning: str = "off", max_tokens: int | None = None, temperature: float | None = None,
-                   images: list[str] | None = None) -> LLMResult[T]:
+                   images: list[str] | None = None, non_empty: bool = False) -> LLMResult[T]:
+        if self.s.reasoning_limit == "off":
+            reasoning = "off"  # the endpoint's models reason until their token limit: no call thinks
+        if role == "main" and reasoning != "off" and self.s.reasoner_model:
+            role = "reasoner"  # a call that reasons goes to the reasoner model
         route = self.s.route(role)
         kw = dict(agent=agent, role=role, system=system, user=user, schema=schema, doc_id=doc_id, reasoning=reasoning,
-                  max_tokens=max_tokens, temperature=temperature, images=images)
+                  max_tokens=max_tokens, temperature=temperature, images=images, non_empty=non_empty)
         fb = route.fallback_model
         if not fb or fb == route.model:
             return await self._call_model(route.model, **kw)
@@ -177,7 +190,7 @@ class Gateway:
     async def _call_model(self, model: str, *, agent: str, role: str, system: str, user: str, schema: type[T],
                           doc_id: str = "", reasoning: str = "off", max_tokens: int | None = None,
                           temperature: float | None = None, images: list[str] | None = None,
-                          guarded: bool = False) -> LLMResult[T]:
+                          non_empty: bool = False, guarded: bool = False) -> LLMResult[T]:
         route = self.s.route(role)
         # images: data URLs (page renders) sent with the text as one multimodal user message
         content: Any = user if not images else [{"type": "text", "text": user}] + [
@@ -186,7 +199,9 @@ class Gateway:
             "model": model,
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": content}],
             "response_format": {"type": "json_schema",
-                                "json_schema": {"name": schema.__name__, "strict": True, "schema": strict_schema(schema)}},
+                                "json_schema": {"name": schema.__name__, "strict": True,
+                                                "schema": _non_empty(strict_schema(schema)) if non_empty and
+                                                self.s.llm_api_flavor != "openrouter" else strict_schema(schema)}},
             "max_tokens": min(self.s.max_tokens_ceiling, (max_tokens or route.max_tokens) + (
                 self.s.thinking_overhead_tokens if reasoning == "off" and self.s.llm_api_flavor != "openrouter" else 0)),
             "temperature": route.temperature if temperature is None else temperature,
